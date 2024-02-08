@@ -17,7 +17,7 @@ func main() {
 
 	w := worker.New(c, shared.SchedulerTemporalQueue, worker.Options{})
 
-	// w.RegisterWorkflow(shared.GenerateScheduledEvent)
+	w.RegisterWorkflow(shared.GenerateScheduledEvent)
 	w.RegisterActivity(shared.EmitScheduledEvent)
 
 	err = w.Run(worker.InterruptCh())

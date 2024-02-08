@@ -3,7 +3,6 @@ package shared
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/segmentio/kafka-go"
 	"go.temporal.io/sdk/activity"
@@ -18,7 +17,7 @@ func newKafkaWriter(kafkaURL, topic string) *kafka.Writer {
 	}
 }
 
-func EmitScheduledEvent(ctx context.Context, params RequestScheduledEventParams) error {
+func EmitScheduledEvent(ctx context.Context, params RequestScheduledEventParams) (string, error) {
 	logger := activity.GetLogger(ctx)
 	logger.Info("Emit Scheduled Logger Called with params", "params", params)
 	kafkaURL := "localhost:9092"
@@ -35,9 +34,10 @@ func EmitScheduledEvent(ctx context.Context, params RequestScheduledEventParams)
 	}
 	err := writer.WriteMessages(context.Background(), msg)
 	if err != nil {
-		fmt.Println(err)
+		logger.Error("Failed to Write", "error", err)
+		return "", err
 	} else {
-		fmt.Println("produced", key)
+		logger.Info("Successfully wrote message", "message", msg)
 	}
-	return nil
+	return "done", nil
 }

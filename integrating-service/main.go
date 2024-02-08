@@ -31,7 +31,7 @@ func main() {
 
 	scheduledEvent := shared.RequestScheduledEventParams{
 		RequestId: fmt.Sprint(uuid.New()),
-		Schedule:  "every 10s",
+		Schedule:  "every 30s",
 		Event: shared.ScheduledEvent{
 			Data:      "Some Value",
 			RequestId: fmt.Sprint(uuid.New()),

@@ -30,6 +30,21 @@ func main() {
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.SendString("Hello, World!")
 	})
+	app.Post("/schedule", func(c *fiber.Ctx) error {
+		var params shared.RequestScheduledEventParams
+		if err := c.BodyParser(params); err != nil {
+			return err
+		}
+		scheduleEvent(params)
+
+		return c.JSON(struct {
+			Message string
+			Data    any
+		}{
+			Message: "Successfully Scheduled Event",
+			Data:    params,
+		})
+	})
 
 	go func() {
 		log.Fatal(app.Listen(":3000"))
@@ -41,7 +56,7 @@ func main() {
 		Topic:    "scheduler",
 		MaxBytes: 10e6, // 10MB
 	})
-	// r.SetOffset(0)
+	r.SetOffsetAt(context.Background(), time.Now())
 
 	go func() {
 		for {
@@ -54,8 +69,8 @@ func main() {
 				json.Unmarshal(m.Value, &params)
 
 				scheduleEvent(params)
+				fmt.Printf("message at offset %d: %s = %s\n", m.Offset, string(m.Key), string(m.Value))
 			}
-			fmt.Printf("message at offset %d: %s = %s\n", m.Offset, string(m.Key), string(m.Value))
 		}
 	}()
 
@@ -78,7 +93,7 @@ func scheduleEvent(params shared.RequestScheduledEventParams) {
 		ID: scheduleID,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{
-				{Every: time.Second * 10},
+				{Every: time.Second * 30},
 			},
 		},
 		Action: &client.ScheduleWorkflowAction{
