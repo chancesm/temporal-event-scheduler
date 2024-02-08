@@ -6,15 +6,89 @@ package main
 // from this directory. See: https://github.com/golang/go/issues/37700
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/chancesm/temporal-event-scheduler/shared"
+	"github.com/gofiber/fiber/v2"
+	"github.com/segmentio/kafka-go"
+	"go.temporal.io/sdk/client"
 )
 
 func main() {
-	fmt.Println(string("scheduler-service"))
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	// Respond to web requests
+	app := fiber.New()
 
-	// Also Read from kafka
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.SendString("Hello, World!")
+	})
+
+	go func() {
+		log.Fatal(app.Listen(":3000"))
+	}()
+
+	// make a new reader that consumes from topic-A, partition 0, at offset 42
+	r := kafka.NewReader(kafka.ReaderConfig{
+		Brokers:  []string{"localhost:9092"},
+		Topic:    "scheduler",
+		MaxBytes: 10e6, // 10MB
+	})
+	// r.SetOffset(0)
+
+	go func() {
+		for {
+			m, err := r.ReadMessage(context.Background())
+			if err != nil {
+				break
+			}
+			if string(m.Key) == "requestScheduledEvent" {
+				var params shared.RequestScheduledEventParams
+				json.Unmarshal(m.Value, &params)
+
+				scheduleEvent(params)
+			}
+			fmt.Printf("message at offset %d: %s = %s\n", m.Offset, string(m.Key), string(m.Value))
+		}
+	}()
+
+	<-done
+	log.Print("Server Stopped")
+}
+
+func scheduleEvent(params shared.RequestScheduledEventParams) {
+	log.Println("This function was called")
+	temporalClient, err := client.Dial(client.Options{})
+	if err != nil {
+		log.Fatalln("Unable to create client", err)
+	}
+	defer temporalClient.Close()
+
+	scheduleID := params.RequestId
+	workflowID := fmt.Sprintf("%s_schedule_workflow", scheduleID)
+	// Create the schedule.
+	_, err = temporalClient.ScheduleClient().Create(context.TODO(), client.ScheduleOptions{
+		ID: scheduleID,
+		Spec: client.ScheduleSpec{
+			Intervals: []client.ScheduleIntervalSpec{
+				{Every: time.Second * 10},
+			},
+		},
+		Action: &client.ScheduleWorkflowAction{
+			ID:        workflowID,
+			Workflow:  shared.GenerateScheduledEvent,
+			TaskQueue: shared.SchedulerTemporalQueue,
+			Args:      []interface{}{params},
+		},
+	})
+	if err != nil {
+		log.Fatalln("Unable to create Schedule", err)
+	}
 }
